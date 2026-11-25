@@ -61,14 +61,25 @@
         let isNfcMode = false;
 
         // ⚠️ 請將下方網址替換為你的 Google Apps Script 部署網址 (.../exec)
-        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby2eWayqA_E9-UKHsuK7TbduLwiTZFp1c99FJThlHxqu4QbkXLzQDsWKzjFuujtQuV3/exec';
+        const GAS_WEB_APP_URL = 'YOUR_APPS_SCRIPT_EXEC_URL';
 
-        // 偵測是否為 NFC 感應進入（檢查網址錨點 #nfc 或參數 mode=nfc）
+        // 偵測是否為 NFC 感應進入（支援 ?mode=nfc、#nfc、liff.state 與 sessionStorage）
         function detectCheckInMode() {
-            const hash = window.location.hash.toLowerCase();
+            const fullUrl = window.location.href.toLowerCase();
             const search = window.location.search.toLowerCase();
+            const hash = window.location.hash.toLowerCase();
+            const params = new URLSearchParams(window.location.search);
+            const modeParam = (params.get('mode') || params.get('token') || params.get('nfc') || '').toLowerCase();
+            const liffState = (params.get('liff.state') || '').toLowerCase();
 
-            if (hash.includes('nfc') || search.includes('nfc') || sessionStorage.getItem('is_nfc_mode') === 'true') {
+            if (
+                fullUrl.includes('nfc') ||
+                search.includes('nfc') ||
+                hash.includes('nfc') ||
+                modeParam.includes('nfc') ||
+                liffState.includes('nfc') ||
+                sessionStorage.getItem('is_nfc_mode') === 'true'
+            ) {
                 isNfcMode = true;
                 sessionStorage.setItem('is_nfc_mode', 'true');
             }
@@ -88,7 +99,7 @@
 
             try {
                 await liff.init({ liffId: '2008064558-DLpEARY3' });
-                detectCheckInMode(); // LIFF 初始化後再次確認
+                detectCheckInMode();
 
                 if (!liff.isLoggedIn()) {
                     liff.login();
@@ -159,7 +170,7 @@
                     console.error('NFC 取得密碼失敗:', error);
                     document.getElementById('result').innerText = '⚠️ 無法獲取每日亂碼，請確認網路後重試。';
                 }
-                return; // 結束函式，確保不會往下執行掃描
+                return;
             }
 
             // 途徑 B：一般 QR Code 掃描模式
