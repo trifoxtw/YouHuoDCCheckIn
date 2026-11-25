@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>LINE LIFF QR Code Check-in</title>
+    <title>LINE LIFF Check-in</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -10,6 +10,16 @@
             font-family: Arial, sans-serif;
             text-align: center;
             padding: 20px;
+        }
+        #mode-status {
+            margin: 10px auto 15px;
+            padding: 8px 14px;
+            display: inline-block;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            background-color: #f0f0f0;
+            color: #333;
         }
         button {
             display: block;
@@ -27,6 +37,8 @@
 </head>
 <body>
     <h2>選擇班別進行打卡</h2>
+    <div id="mode-status">模式偵測中...</div>
+
     <button onclick="checkIn('早診上班')">早診上班</button>
     <button onclick="checkIn('早診下班')">早診下班</button>
     <button onclick="checkIn('午診上班')">午診上班</button>
@@ -39,19 +51,50 @@
         let userId = '';
         let nfcCode = '';
 
-        function extractNfcCode() {
+        // 解析一般網址參數與 LINE LIFF 的 liff.state 參數
+        function resolveNfcCode() {
             const urlParams = new URLSearchParams(window.location.search);
-            const code = urlParams.get('token') || urlParams.get('nfc') || '';
-            nfcCode = code.trim();
+            let code = urlParams.get('token') || urlParams.get('nfc') || '';
+
+            // 檢查 LINE LIFF 轉址時夾帶的 liff.state
+            if (!code && urlParams.get('liff.state')) {
+                const decodedState = decodeURIComponent(urlParams.get('liff.state'));
+                const stateQuery = decodedState.includes('?')
+                    ? decodedState.split('?')[1]
+                    : decodedState.replace(/^\?/, '');
+                const stateParams = new URLSearchParams(stateQuery);
+                code = stateParams.get('token') || stateParams.get('nfc') || '';
+            }
+
+            // 存入 sessionStorage 避免登入重新導向後參數遺失
+            if (code) {
+                nfcCode = code.trim();
+                sessionStorage.setItem('nfc_checkin_code', nfcCode);
+            } else {
+                nfcCode = sessionStorage.getItem('nfc_checkin_code') || '';
+            }
+
+            // 更新畫面上的途徑提示
+            const statusEl = document.getElementById('mode-status');
             if (nfcCode) {
-                console.log('偵測到 NFC 驗證碼:', nfcCode);
+                statusEl.innerText = '目前途徑：NFC 感應打卡（免掃描 QR Code）';
+                statusEl.style.backgroundColor = '#e6f4ea';
+                statusEl.style.color = '#137333';
+            } else {
+                statusEl.innerText = '目前途徑：QR Code 掃描打卡';
+                statusEl.style.backgroundColor = '#f1f3f4';
+                statusEl.style.color = '#3c4043';
             }
         }
 
         async function initializeLIFF() {
-            extractNfcCode();
+            resolveNfcCode();
+
             try {
                 await liff.init({ liffId: '2008064558-DLpEARY3' });
+                // init 完成後再檢查一次，確保捕捉到 SDK 解析後的參數
+                resolveNfcCode();
+
                 if (!liff.isLoggedIn()) {
                     liff.login();
                 } else {
@@ -65,44 +108,56 @@
             }
         }
 
-        async function checkIn(shift) {
+        // 途徑 A：NFC 感應直接送出（不開啟相機）
+        function submitByNfc(shift) {
+            console.log('執行 NFC 打卡，驗證碼:', nfcCode);
+            submitToGoogleForm(shift, nfcCode);
+            // 送出後清除暫存，避免下次從一般選單打開仍殘留 NFC 狀態
+            sessionStorage.removeItem('nfc_checkin_code');
+        }
+
+        // 途徑 B：開啟相機掃描 QR Code 後送出
+        async function submitByQrCode(shift) {
             try {
-                if (!liff.isLoggedIn()) {
-                    liff.login();
-                    return;
-                }
-
-                let verifyContent = '';
-                if (nfcCode) {
-                    verifyContent = nfcCode;
-                    console.log('使用 NFC 內容:', verifyContent);
-                } else {
-                    const result = await liff.scanCodeV2();
-                    verifyContent = result.value;
-                    console.log('QR Code 內容:', verifyContent);
-                }
-
-                // Google 表單預填連結
-                const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
-                const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(verifyContent)}`;
-
-                // 自動提交表單（使用 iframe 隱藏提交過程）
-                const iframe = document.createElement('iframe');
-                iframe.style.display = 'none';
-                iframe.src = prefilledUrl;
-                document.body.appendChild(iframe);
-
-                // 顯示打卡結果
-                const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-                document.getElementById('result').innerText = `打卡成功！\n班別：${shift}\n時間：${currentTime}`;
-
-                // 移除 iframe
-                setTimeout(() => {
-                    document.body.removeChild(iframe);
-                }, 2000);
+                const result = await liff.scanCodeV2();
+                const qrContent = result.value;
+                console.log('執行 QR Code 打卡，內容:', qrContent);
+                submitToGoogleForm(shift, qrContent);
             } catch (error) {
                 console.error('QR Code 掃描失敗:', error);
                 document.getElementById('result').innerText = 'QR Code 掃描失敗，請重試。';
+            }
+        }
+
+        // 共用表單提交函式
+        function submitToGoogleForm(shift, verifyContent) {
+            const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
+            const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(verifyContent)}`;
+
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = prefilledUrl;
+            document.body.appendChild(iframe);
+
+            const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+            document.getElementById('result').innerText = `打卡成功！\n班別：${shift}\n時間：${currentTime}`;
+
+            setTimeout(() => {
+                document.body.removeChild(iframe);
+            }, 2000);
+        }
+
+        // 點擊班別按鈕入口：分流判斷
+        async function checkIn(shift) {
+            if (!liff.isLoggedIn()) {
+                liff.login();
+                return;
+            }
+
+            if (nfcCode) {
+                submitByNfc(shift);
+            } else {
+                await submitByQrCode(shift);
             }
         }
 
