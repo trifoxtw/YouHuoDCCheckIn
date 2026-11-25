@@ -21,6 +21,7 @@
         #result {
             margin-top: 20px;
             font-weight: bold;
+            white-space: pre-line;
         }
     </style>
 </head>
@@ -36,8 +37,19 @@
 
     <script>
         let userId = '';
+        let nfcCode = '';
+
+        function extractNfcCode() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('token') || urlParams.get('nfc') || '';
+            nfcCode = code.trim();
+            if (nfcCode) {
+                console.log('偵測到 NFC 驗證碼:', nfcCode);
+            }
+        }
 
         async function initializeLIFF() {
+            extractNfcCode();
             try {
                 await liff.init({ liffId: '2008064558-DLpEARY3' });
                 if (!liff.isLoggedIn()) {
@@ -60,13 +72,19 @@
                     return;
                 }
 
-                const result = await liff.scanCodeV2();
-                const qrContent = result.value;
-                console.log('QR Code 內容:', qrContent);
+                let verifyContent = '';
+                if (nfcCode) {
+                    verifyContent = nfcCode;
+                    console.log('使用 NFC 內容:', verifyContent);
+                } else {
+                    const result = await liff.scanCodeV2();
+                    verifyContent = result.value;
+                    console.log('QR Code 內容:', verifyContent);
+                }
 
                 // Google 表單預填連結
                 const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
-                const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(qrContent)}`;
+                const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(verifyContent)}`;
 
                 // 自動提交表單（使用 iframe 隱藏提交過程）
                 const iframe = document.createElement('iframe');
@@ -93,5 +111,3 @@
     </script>
 </body>
 </html>
-
-
