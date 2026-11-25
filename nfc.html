@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LINE LIFF NFC 打卡</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 6px 14px;
+            margin-bottom: 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            background-color: #e6f4ea;
+            color: #137333;
+        }
+        button {
+            display: block;
+            margin: 10px auto;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 80%;
+            max-width: 260px;
+        }
+        #result {
+            margin-top: 20px;
+            font-weight: bold;
+            white-space: pre-line;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <h2>選擇班別進行打卡</h2>
+    <div class="badge">📡 NFC 感應專屬打卡頁（免掃描 QR Code）</div>
+
+    <button onclick="checkIn('早診上班')">早診上班</button>
+    <button onclick="checkIn('早診下班')">早診下班</button>
+    <button onclick="checkIn('午診上班')">午診上班</button>
+    <button onclick="checkIn('午診下班')">午診下班</button>
+    <button onclick="checkIn('晚診上班')">晚診上班</button>
+    <button onclick="checkIn('晚診下班')">晚診下班</button>
+    <div id="result"></div>
+
+    <script>
+        let userId = '';
+        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby2eWayqA_E9-UKHsuK7TbduLwiTZFp1c99FJThlHxqu4QbkXLzQDsWKzjFuujtQuV3/exec';
+
+        async function initializeLIFF() {
+            try {
+                await liff.init({ liffId: '2008064558-DLpEARY3' });
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                } else {
+                    const profile = await liff.getProfile();
+                    userId = profile.userId;
+                    console.log('User ID:', userId);
+                }
+            } catch (error) {
+                console.error('LIFF 初始化失敗:', error);
+                document.getElementById('result').innerText = 'LIFF 初始化失敗，請稍後再試。';
+            }
+        }
+
+        async function fetchDailyPassword() {
+            const response = await fetch(GAS_WEB_APP_URL);
+            if (!response.ok) {
+                throw new Error('無法連線至密碼伺服器');
+            }
+            const data = await response.json();
+            if (!data.code) {
+                throw new Error('回傳資料中找不到每日密碼');
+            }
+            return data.code;
+        }
+
+        async function checkIn(shift) {
+            try {
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                    return;
+                }
+
+                if (!userId) {
+                    document.getElementById('result').innerText = '正在取得 LINE 使用者資料，請稍候 1 秒再按一次。';
+                    return;
+                }
+
+                document.getElementById('result').innerText = '⏳ 正在取得今日密碼並送出打卡...';
+                const dailyCode = await fetchDailyPassword();
+                console.log('取得今日密碼:', dailyCode);
+
+                // Google 表單預填連結
+                const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
+                const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(dailyCode)}`;
+
+                // 自動提交表單（使用 iframe 隱藏提交過程）
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.src = prefilledUrl;
+                document.body.appendChild(iframe);
+
+                // 顯示打卡結果
+                const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+                document.getElementById('result').innerText = `打卡成功！\n班別：${shift}\n時間：${currentTime}`;
+
+                // 移除 iframe
+                setTimeout(() => {
+                    document.body.removeChild(iframe);
+                }, 2000);
+            } catch (error) {
+                console.error('NFC 打卡失敗:', error);
+                document.getElementById('result').innerText = '無法獲取每日亂碼，請稍後再試。';
+            }
+        }
+
+        // 初始化 LIFF
+        initializeLIFF();
+    </script>
+</body>
+</html>
