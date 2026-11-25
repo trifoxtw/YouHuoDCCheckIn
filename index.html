@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>LINE LIFF Check-in</title>
+    <title>LINE LIFF 打卡系統</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -11,33 +11,42 @@
             text-align: center;
             padding: 20px;
         }
-        #mode-status {
-            margin: 10px auto 15px;
-            padding: 8px 14px;
+        #mode-badge {
             display: inline-block;
-            border-radius: 6px;
+            padding: 6px 14px;
+            margin-bottom: 15px;
+            border-radius: 20px;
             font-size: 14px;
             font-weight: bold;
-            background-color: #f0f0f0;
-            color: #333;
+        }
+        .mode-nfc {
+            background-color: #e6f4ea;
+            color: #137333;
+        }
+        .mode-qr {
+            background-color: #f1f3f4;
+            color: #3c4043;
         }
         button {
             display: block;
             margin: 10px auto;
-            padding: 10px 20px;
+            padding: 12px 24px;
             font-size: 16px;
             cursor: pointer;
+            width: 80%;
+            max-width: 260px;
         }
         #result {
             margin-top: 20px;
             font-weight: bold;
             white-space: pre-line;
+            line-height: 1.6;
         }
     </style>
 </head>
 <body>
     <h2>選擇班別進行打卡</h2>
-    <div id="mode-status">模式偵測中...</div>
+    <div id="mode-badge" class="mode-qr">模式偵測中...</div>
 
     <button onclick="checkIn('早診上班')">早診上班</button>
     <button onclick="checkIn('早診下班')">早診下班</button>
@@ -49,51 +58,37 @@
 
     <script>
         let userId = '';
-        let nfcCode = '';
+        let isNfcMode = false;
 
-        // 解析一般網址參數與 LINE LIFF 的 liff.state 參數
-        function resolveNfcCode() {
-            const urlParams = new URLSearchParams(window.location.search);
-            let code = urlParams.get('token') || urlParams.get('nfc') || '';
+        // ⚠️ 請將下方網址替換為你的 Google Apps Script 部署網址 (.../exec)
+        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby2eWayqA_E9-UKHsuK7TbduLwiTZFp1c99FJThlHxqu4QbkXLzQDsWKzjFuujtQuV3/exec';
 
-            // 檢查 LINE LIFF 轉址時夾帶的 liff.state
-            if (!code && urlParams.get('liff.state')) {
-                const decodedState = decodeURIComponent(urlParams.get('liff.state'));
-                const stateQuery = decodedState.includes('?')
-                    ? decodedState.split('?')[1]
-                    : decodedState.replace(/^\?/, '');
-                const stateParams = new URLSearchParams(stateQuery);
-                code = stateParams.get('token') || stateParams.get('nfc') || '';
+        // 偵測是否為 NFC 感應進入（檢查網址錨點 #nfc 或參數 mode=nfc）
+        function detectCheckInMode() {
+            const hash = window.location.hash.toLowerCase();
+            const search = window.location.search.toLowerCase();
+
+            if (hash.includes('nfc') || search.includes('nfc') || sessionStorage.getItem('is_nfc_mode') === 'true') {
+                isNfcMode = true;
+                sessionStorage.setItem('is_nfc_mode', 'true');
             }
 
-            // 存入 sessionStorage 避免登入重新導向後參數遺失
-            if (code) {
-                nfcCode = code.trim();
-                sessionStorage.setItem('nfc_checkin_code', nfcCode);
+            const badge = document.getElementById('mode-badge');
+            if (isNfcMode) {
+                badge.innerText = '📡 NFC 感應模式（免開相機）';
+                badge.className = 'mode-nfc';
             } else {
-                nfcCode = sessionStorage.getItem('nfc_checkin_code') || '';
-            }
-
-            // 更新畫面上的途徑提示
-            const statusEl = document.getElementById('mode-status');
-            if (nfcCode) {
-                statusEl.innerText = '目前途徑：NFC 感應打卡（免掃描 QR Code）';
-                statusEl.style.backgroundColor = '#e6f4ea';
-                statusEl.style.color = '#137333';
-            } else {
-                statusEl.innerText = '目前途徑：QR Code 掃描打卡';
-                statusEl.style.backgroundColor = '#f1f3f4';
-                statusEl.style.color = '#3c4043';
+                badge.innerText = '📷 QR Code 掃描模式';
+                badge.className = 'mode-qr';
             }
         }
 
         async function initializeLIFF() {
-            resolveNfcCode();
+            detectCheckInMode();
 
             try {
                 await liff.init({ liffId: '2008064558-DLpEARY3' });
-                // init 完成後再檢查一次，確保捕捉到 SDK 解析後的參數
-                resolveNfcCode();
+                detectCheckInMode(); // LIFF 初始化後再次確認
 
                 if (!liff.isLoggedIn()) {
                     liff.login();
@@ -108,31 +103,23 @@
             }
         }
 
-        // 途徑 A：NFC 感應直接送出（不開啟相機）
-        function submitByNfc(shift) {
-            console.log('執行 NFC 打卡，驗證碼:', nfcCode);
-            submitToGoogleForm(shift, nfcCode);
-            // 送出後清除暫存，避免下次從一般選單打開仍殘留 NFC 狀態
-            sessionStorage.removeItem('nfc_checkin_code');
-        }
-
-        // 途徑 B：開啟相機掃描 QR Code 後送出
-        async function submitByQrCode(shift) {
-            try {
-                const result = await liff.scanCodeV2();
-                const qrContent = result.value;
-                console.log('執行 QR Code 打卡，內容:', qrContent);
-                submitToGoogleForm(shift, qrContent);
-            } catch (error) {
-                console.error('QR Code 掃描失敗:', error);
-                document.getElementById('result').innerText = 'QR Code 掃描失敗，請重試。';
+        // 向 Google Apps Script 取得今日動態密碼
+        async function fetchDailyPasswordFromGAS() {
+            const response = await fetch(GAS_WEB_APP_URL);
+            if (!response.ok) {
+                throw new Error('無法連線至密碼伺服器');
             }
+            const data = await response.json();
+            if (!data.code) {
+                throw new Error('回傳資料中找不到今日密碼');
+            }
+            return data.code;
         }
 
-        // 共用表單提交函式
-        function submitToGoogleForm(shift, verifyContent) {
+        // 共用送出 Google 表單邏輯
+        function submitToGoogleForm(shift, dailyCode) {
             const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
-            const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(verifyContent)}`;
+            const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(dailyCode)}`;
 
             const iframe = document.createElement('iframe');
             iframe.style.display = 'none';
@@ -142,22 +129,48 @@
             const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
             document.getElementById('result').innerText = `打卡成功！\n班別：${shift}\n時間：${currentTime}`;
 
+            // 清除此次 NFC 狀態標記，避免下次手動開啟選單時誤判
+            sessionStorage.removeItem('is_nfc_mode');
+
             setTimeout(() => {
                 document.body.removeChild(iframe);
             }, 2000);
         }
 
-        // 點擊班別按鈕入口：分流判斷
         async function checkIn(shift) {
             if (!liff.isLoggedIn()) {
                 liff.login();
                 return;
             }
 
-            if (nfcCode) {
-                submitByNfc(shift);
-            } else {
-                await submitByQrCode(shift);
+            if (!userId) {
+                document.getElementById('result').innerText = '正在取得 LINE 使用者資料，請稍候 1 秒再按一次。';
+                return;
+            }
+
+            // 途徑 A：NFC 感應模式（絕對不呼叫 scanCodeV2）
+            if (isNfcMode) {
+                try {
+                    document.getElementById('result').innerText = '⏳ 正在驗證 NFC 並取得今日密碼...';
+                    const dailyCode = await fetchDailyPasswordFromGAS();
+                    console.log('已取得今日密碼:', dailyCode);
+                    submitToGoogleForm(shift, dailyCode);
+                } catch (error) {
+                    console.error('NFC 取得密碼失敗:', error);
+                    document.getElementById('result').innerText = '⚠️ 無法獲取每日亂碼，請確認網路後重試。';
+                }
+                return; // 結束函式，確保不會往下執行掃描
+            }
+
+            // 途徑 B：一般 QR Code 掃描模式
+            try {
+                const result = await liff.scanCodeV2();
+                const qrContent = result.value;
+                console.log('QR Code 內容:', qrContent);
+                submitToGoogleForm(shift, qrContent);
+            } catch (error) {
+                console.error('QR Code 掃描失敗:', error);
+                document.getElementById('result').innerText = 'QR Code 掃描失敗，請重試。';
             }
         }
 
