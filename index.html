@@ -60,12 +60,59 @@
 
     <script>
         let userId = '';
+        let preloadedCode = '';
         let html5QrCode = null;
         let isFallbackRunning = false;
 
+        // 從純文字或 LIFF/一般網址中擷取密鑰（支援 ?code=、?token= 或 liff.state）
+        function extractCodeFromInput(rawValue) {
+            if (!rawValue) return '';
+            const trimmed = String(rawValue).trim();
+
+            try {
+                const parsedUrl = new URL(trimmed);
+                const directCode = parsedUrl.searchParams.get('code') || parsedUrl.searchParams.get('token');
+                if (directCode) {
+                    return directCode.trim();
+                }
+
+                const liffState = parsedUrl.searchParams.get('liff.state');
+                if (liffState) {
+                    const decodedState = decodeURIComponent(liffState);
+                    const queryPart = decodedState.includes('?')
+                        ? decodedState.split('?')[1]
+                        : decodedState.replace(/^\?/, '');
+                    const stateParams = new URLSearchParams(queryPart);
+                    const stateCode = stateParams.get('code') || stateParams.get('token');
+                    if (stateCode) {
+                        return stateCode.trim();
+                    }
+                }
+            } catch (e) {
+                // 非完整 URL，改以字串規則解析
+            }
+
+            const match = trimmed.match(/[?&](?:code|token)=([^&#]+)/i);
+            if (match && match[1]) {
+                return decodeURIComponent(match[1]).trim();
+            }
+
+            return trimmed;
+        }
+
+        function checkUrlPreloadedCode() {
+            const extracted = extractCodeFromInput(window.location.href);
+            if (extracted && extracted !== window.location.href.trim()) {
+                preloadedCode = extracted;
+                console.log('網址自帶密鑰:', preloadedCode);
+            }
+        }
+
         async function initializeLIFF() {
+            checkUrlPreloadedCode();
             try {
                 await liff.init({ liffId: '2008064558-DLpEARY3' });
+                checkUrlPreloadedCode();
                 if (!liff.isLoggedIn()) {
                     liff.login();
                 } else {
@@ -233,18 +280,27 @@
 
                 setButtonsDisabled(true);
                 await stopFallbackScanner();
-                let qrContent = '';
+                let rawScannedValue = '';
 
-                try {
-                    const result = await scanWithTimeout(5000);
-                    qrContent = result.value;
-                    console.log('QR Code 內容:', qrContent);
-                } catch (primaryError) {
-                    console.warn('原生掃碼逾時或失敗，改用備援掃描:', primaryError);
-                    document.getElementById('result').innerText = '正在改用備援相機掃描...';
-                    qrContent = await startFallbackScanner();
-                    console.log('備援掃碼 QR Code 內容:', qrContent);
+                if (preloadedCode) {
+                    rawScannedValue = preloadedCode;
+                    preloadedCode = '';
+                    console.log('使用網址自帶密鑰:', rawScannedValue);
+                } else {
+                    try {
+                        const result = await scanWithTimeout(5000);
+                        rawScannedValue = result.value;
+                        console.log('原生掃碼原始內容:', rawScannedValue);
+                    } catch (primaryError) {
+                        console.warn('原生掃碼逾時或失敗，改用備援掃描:', primaryError);
+                        document.getElementById('result').innerText = '正在改用備援相機掃描...';
+                        rawScannedValue = await startFallbackScanner();
+                        console.log('備援掃碼原始內容:', rawScannedValue);
+                    }
                 }
+
+                const qrContent = extractCodeFromInput(rawScannedValue);
+                console.log('最終送出密鑰:', qrContent);
 
                 if (!qrContent) {
                     throw new Error('未取得有效 QR Code 內容');
