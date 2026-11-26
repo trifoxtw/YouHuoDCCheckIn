@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -18,9 +19,21 @@
             font-size: 16px;
             cursor: pointer;
         }
+        #fallback-box {
+            display: none;
+            max-width: 340px;
+            margin: 16px auto;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        #qr-fallback-reader {
+            width: 100%;
+        }
         #result {
             margin-top: 20px;
             font-weight: bold;
+            white-space: pre-line;
         }
     </style>
 </head>
@@ -32,10 +45,19 @@
     <button onclick="checkIn('午診下班')">午診下班</button>
     <button onclick="checkIn('晚診上班')">晚診上班</button>
     <button onclick="checkIn('晚診下班')">晚診下班</button>
+
+    <div id="fallback-box">
+        <p style="margin-top: 0; font-size: 14px;">原生掃碼逾時或異常，已改用備援相機掃描：</p>
+        <div id="qr-fallback-reader"></div>
+        <button type="button" onclick="cancelFallbackScanner()">取消備援掃描</button>
+    </div>
+
     <div id="result"></div>
 
     <script>
         let userId = '';
+        let html5QrCode = null;
+        let isFallbackRunning = false;
 
         async function initializeLIFF() {
             try {
@@ -53,6 +75,105 @@
             }
         }
 
+        function scanWithTimeout(timeoutMs = 5000) {
+            return new Promise((resolve, reject) => {
+                let settled = false;
+                const timer = setTimeout(() => {
+                    if (!settled) {
+                        settled = true;
+                        reject(new Error('LIFF_SCAN_TIMEOUT'));
+                    }
+                }, timeoutMs);
+
+                liff.scanCodeV2()
+                    .then((res) => {
+                        if (!settled) {
+                            settled = true;
+                            clearTimeout(timer);
+                            resolve(res);
+                        }
+                    })
+                    .catch((err) => {
+                        if (!settled) {
+                            settled = true;
+                            clearTimeout(timer);
+                            reject(err);
+                        }
+                    });
+            });
+        }
+
+        function startFallbackScanner() {
+            return new Promise(async (resolve, reject) => {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    reject(new Error('此裝置不支援網頁相機串流'));
+                    return;
+                }
+
+                const box = document.getElementById('fallback-box');
+                box.style.display = 'block';
+                html5QrCode = new Html5Qrcode('qr-fallback-reader');
+                isFallbackRunning = true;
+
+                try {
+                    await html5QrCode.start(
+                        { facingMode: 'environment' },
+                        { fps: 10, qrbox: { width: 220, height: 220 } },
+                        async (decodedText) => {
+                            await stopFallbackScanner();
+                            resolve(decodedText);
+                        },
+                        () => {}
+                    );
+                } catch (err) {
+                    await stopFallbackScanner();
+                    reject(err);
+                }
+            });
+        }
+
+        async function stopFallbackScanner() {
+            const box = document.getElementById('fallback-box');
+            if (html5QrCode && isFallbackRunning) {
+                try {
+                    await html5QrCode.stop();
+                    await html5QrCode.clear();
+                } catch (e) {
+                    console.warn('停止備援相機時發生提示:', e);
+                }
+            }
+            isFallbackRunning = false;
+            box.style.display = 'none';
+        }
+
+        async function cancelFallbackScanner() {
+            await stopFallbackScanner();
+            document.getElementById('result').innerText = '已取消掃描，請重試。';
+        }
+
+        function submitForm(shift, qrContent) {
+            // Google 表單預填連結
+            const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
+            const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(qrContent)}`;
+
+            // 自動提交表單（使用 iframe 隱藏提交過程）
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = prefilledUrl;
+            document.body.appendChild(iframe);
+
+            // 顯示打卡結果
+            const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+            document.getElementById('result').innerText = `打卡成功！\n班別：${shift}\n時間：${currentTime}`;
+
+            // 移除 iframe
+            setTimeout(() => {
+                if (iframe.parentNode) {
+                    document.body.removeChild(iframe);
+                }
+            }, 2000);
+        }
+
         async function checkIn(shift) {
             try {
                 if (!liff.isLoggedIn()) {
@@ -60,30 +181,28 @@
                     return;
                 }
 
-                const result = await liff.scanCodeV2();
-                const qrContent = result.value;
-                console.log('QR Code 內容:', qrContent);
+                await stopFallbackScanner();
+                let qrContent = '';
 
-                // Google 表單預填連結
-                const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
-                const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(qrContent)}`;
+                try {
+                    const result = await scanWithTimeout(5000);
+                    qrContent = result.value;
+                    console.log('QR Code 內容:', qrContent);
+                } catch (primaryError) {
+                    console.warn('原生掃碼逾時或失敗，改用備援掃描:', primaryError);
+                    document.getElementById('result').innerText = '正在改用備援相機掃描...';
+                    qrContent = await startFallbackScanner();
+                    console.log('備援掃碼 QR Code 內容:', qrContent);
+                }
 
-                // 自動提交表單（使用 iframe 隱藏提交過程）
-                const iframe = document.createElement('iframe');
-                iframe.style.display = 'none';
-                iframe.src = prefilledUrl;
-                document.body.appendChild(iframe);
+                if (!qrContent) {
+                    throw new Error('未取得有效 QR Code 內容');
+                }
 
-                // 顯示打卡結果
-                const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-                document.getElementById('result').innerText = `打卡成功！\n班別：${shift}\n時間：${currentTime}`;
-
-                // 移除 iframe
-                setTimeout(() => {
-                    document.body.removeChild(iframe);
-                }, 2000);
+                submitForm(shift, qrContent);
             } catch (error) {
                 console.error('QR Code 掃描失敗:', error);
+                await stopFallbackScanner();
                 document.getElementById('result').innerText = 'QR Code 掃描失敗，請重試。';
             }
         }
@@ -93,5 +212,3 @@
     </script>
 </body>
 </html>
-
-
