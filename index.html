@@ -19,6 +19,10 @@
             font-size: 16px;
             cursor: pointer;
         }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         #fallback-box {
             display: none;
             max-width: 340px;
@@ -73,6 +77,12 @@
                 console.error('LIFF 初始化失敗:', error);
                 document.getElementById('result').innerText = 'LIFF 初始化失敗，請稍後再試。';
             }
+        }
+
+        function setButtonsDisabled(disabled) {
+            document.querySelectorAll('button').forEach(btn => {
+                btn.disabled = disabled;
+            });
         }
 
         function scanWithTimeout(timeoutMs = 5000) {
@@ -148,6 +158,7 @@
 
         async function cancelFallbackScanner() {
             await stopFallbackScanner();
+            setButtonsDisabled(false);
             document.getElementById('result').innerText = '已取消掃描，請重試。';
         }
 
@@ -156,22 +167,61 @@
             const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
             const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(qrContent)}`;
 
-            // 自動提交表單（使用 iframe 隱藏提交過程）
+            // 自動提交表單（使用 iframe 隱藏提交過程），完成送出後才開始 5 秒倒數
             const iframe = document.createElement('iframe');
             iframe.style.display = 'none';
-            iframe.src = prefilledUrl;
             document.body.appendChild(iframe);
 
-            // 顯示打卡結果
-            const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-            document.getElementById('result').innerText = `打卡成功！\n班別：${shift}\n時間：${currentTime}`;
+            let hasStartedCountdown = false;
 
-            // 移除 iframe
-            setTimeout(() => {
-                if (iframe.parentNode) {
-                    document.body.removeChild(iframe);
-                }
-            }, 2000);
+            function startCloseCountdown() {
+                if (hasStartedCountdown) return;
+                hasStartedCountdown = true;
+
+                const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+                let secondsLeft = 5;
+
+                document.getElementById('result').innerText =
+                    `打卡成功！\n班別：${shift}\n時間：${currentTime}\n\n視窗將於 ${secondsLeft} 秒後自動關閉...`;
+
+                const timer = setInterval(() => {
+                    secondsLeft -= 1;
+                    if (secondsLeft > 0) {
+                        document.getElementById('result').innerText =
+                            `打卡成功！\n班別：${shift}\n時間：${currentTime}\n\n視窗將於 ${secondsLeft} 秒後自動關閉...`;
+                    } else {
+                        clearInterval(timer);
+                        if (iframe.parentNode) {
+                            document.body.removeChild(iframe);
+                        }
+
+                        if (liff.isInClient()) {
+                            liff.closeWindow();
+                        } else {
+                            window.close();
+                            document.body.innerHTML = `
+                                <div style="margin-top: 60px; font-family: Arial, sans-serif; text-align: center; padding: 20px;">
+                                    <h2>打卡已完成</h2>
+                                    <p>班別：${shift}</p>
+                                    <p>時間：${currentTime}</p>
+                                    <p style="color: #666; margin-top: 20px;">資料已送出，您現在可以直接關閉此網頁分頁。</p>
+                                </div>
+                            `;
+                        }
+                    }
+                }, 1000);
+            }
+
+            iframe.onload = () => {
+                startCloseCountdown();
+            };
+
+            const fallbackTimer = setTimeout(() => {
+                startCloseCountdown();
+            }, 1500);
+
+            iframe.addEventListener('load', () => clearTimeout(fallbackTimer), { once: true });
+            iframe.src = prefilledUrl;
         }
 
         async function checkIn(shift) {
@@ -181,6 +231,7 @@
                     return;
                 }
 
+                setButtonsDisabled(true);
                 await stopFallbackScanner();
                 let qrContent = '';
 
@@ -203,6 +254,7 @@
             } catch (error) {
                 console.error('QR Code 掃描失敗:', error);
                 await stopFallbackScanner();
+                setButtonsDisabled(false);
                 document.getElementById('result').innerText = 'QR Code 掃描失敗，請重試。';
             }
         }
