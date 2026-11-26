@@ -35,20 +35,35 @@
             width: 100%;
         }
         #result {
-            margin-top: 20px;
+            margin-top: 24px;
             font-weight: bold;
             white-space: pre-line;
+            line-height: 1.6;
+        }
+        #complete-btn {
+            display: none;
+            margin: 20px auto 0;
+            padding: 12px 28px;
+            font-size: 16px;
+            font-weight: bold;
+            background-color: #06c755;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <h2>選擇班別進行打卡</h2>
-    <button onclick="checkIn('早診上班')">早診上班</button>
-    <button onclick="checkIn('早診下班')">早診下班</button>
-    <button onclick="checkIn('午診上班')">午診上班</button>
-    <button onclick="checkIn('午診下班')">午診下班</button>
-    <button onclick="checkIn('晚診上班')">晚診上班</button>
-    <button onclick="checkIn('晚診下班')">晚診下班</button>
+    <div id="shift-selection">
+        <h2>選擇班別進行打卡</h2>
+        <button onclick="checkIn('早診上班')">早診上班</button>
+        <button onclick="checkIn('早診下班')">早診下班</button>
+        <button onclick="checkIn('午診上班')">午診上班</button>
+        <button onclick="checkIn('午診下班')">午診下班</button>
+        <button onclick="checkIn('晚診上班')">晚診上班</button>
+        <button onclick="checkIn('晚診下班')">晚診下班</button>
+    </div>
 
     <div id="fallback-box">
         <p style="margin-top: 0; font-size: 14px;">原生掃碼逾時或異常，已改用備援相機掃描：</p>
@@ -57,12 +72,17 @@
     </div>
 
     <div id="result"></div>
+    <button id="complete-btn" type="button" onclick="finishAndCloseWindow()">完成打卡</button>
 
     <script>
         let userId = '';
         let preloadedCode = '';
         let html5QrCode = null;
         let isFallbackRunning = false;
+        let closeTimer = null;
+        let activeIframe = null;
+        let completedShift = '';
+        let completedTime = '';
 
         // 從純文字或 LIFF/一般網址中擷取密鑰（支援 ?code=、?token= 或 liff.state）
         function extractCodeFromInput(rawValue) {
@@ -127,7 +147,7 @@
         }
 
         function setButtonsDisabled(disabled) {
-            document.querySelectorAll('button').forEach(btn => {
+            document.querySelectorAll('#shift-selection button, #fallback-box button').forEach(btn => {
                 btn.disabled = disabled;
             });
         }
@@ -209,15 +229,46 @@
             document.getElementById('result').innerText = '已取消掃描，請重試。';
         }
 
+        function finishAndCloseWindow() {
+            if (closeTimer) {
+                clearInterval(closeTimer);
+                closeTimer = null;
+            }
+            if (activeIframe && activeIframe.parentNode) {
+                activeIframe.parentNode.removeChild(activeIframe);
+                activeIframe = null;
+            }
+
+            if (typeof liff !== 'undefined' && liff.isInClient()) {
+                liff.closeWindow();
+            } else {
+                window.close();
+                document.body.innerHTML = `
+                    <div style="margin-top: 60px; font-family: Arial, sans-serif; text-align: center; padding: 20px;">
+                        <h2>打卡已完成</h2>
+                        <p>打卡診次：${completedShift}</p>
+                        <p>打卡時間：${completedTime}</p>
+                        <p style="color: #666; margin-top: 20px;">資料已送出，您現在可以直接關閉此網頁分頁。</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderCountdownText(secondsLeft) {
+            document.getElementById('result').innerText =
+                `打卡成功\n打卡診次：${completedShift}\n打卡時間：${completedTime}\n\n視窗將於 ${secondsLeft} 秒後自動關閉`;
+        }
+
         function submitForm(shift, qrContent) {
             // Google 表單預填連結
             const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
             const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(qrContent)}`;
 
-            // 自動提交表單（使用 iframe 隱藏提交過程），完成送出後才開始 5 秒倒數
+            // 自動提交表單（使用 iframe 隱藏提交過程），完成送出後才開始 10 秒倒數
             const iframe = document.createElement('iframe');
             iframe.style.display = 'none';
             document.body.appendChild(iframe);
+            activeIframe = iframe;
 
             let hasStartedCountdown = false;
 
@@ -225,36 +276,22 @@
                 if (hasStartedCountdown) return;
                 hasStartedCountdown = true;
 
-                const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-                let secondsLeft = 5;
+                completedShift = shift;
+                completedTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
 
-                document.getElementById('result').innerText =
-                    `打卡成功！\n班別：${shift}\n時間：${currentTime}\n\n視窗將於 ${secondsLeft} 秒後自動關閉...`;
+                document.getElementById('shift-selection').style.display = 'none';
+                document.getElementById('fallback-box').style.display = 'none';
+                document.getElementById('complete-btn').style.display = 'inline-block';
 
-                const timer = setInterval(() => {
+                let secondsLeft = 10;
+                renderCountdownText(secondsLeft);
+
+                closeTimer = setInterval(() => {
                     secondsLeft -= 1;
                     if (secondsLeft > 0) {
-                        document.getElementById('result').innerText =
-                            `打卡成功！\n班別：${shift}\n時間：${currentTime}\n\n視窗將於 ${secondsLeft} 秒後自動關閉...`;
+                        renderCountdownText(secondsLeft);
                     } else {
-                        clearInterval(timer);
-                        if (iframe.parentNode) {
-                            document.body.removeChild(iframe);
-                        }
-
-                        if (liff.isInClient()) {
-                            liff.closeWindow();
-                        } else {
-                            window.close();
-                            document.body.innerHTML = `
-                                <div style="margin-top: 60px; font-family: Arial, sans-serif; text-align: center; padding: 20px;">
-                                    <h2>打卡已完成</h2>
-                                    <p>班別：${shift}</p>
-                                    <p>時間：${currentTime}</p>
-                                    <p style="color: #666; margin-top: 20px;">資料已送出，您現在可以直接關閉此網頁分頁。</p>
-                                </div>
-                            `;
-                        }
+                        finishAndCloseWindow();
                     }
                 }, 1000);
             }
