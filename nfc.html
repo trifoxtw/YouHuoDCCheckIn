@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>LINE LIFF NFC 打卡</title>
+    <title>NFC 打卡</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -30,6 +30,10 @@
             width: 80%;
             max-width: 260px;
         }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         #result {
             margin-top: 20px;
             font-weight: bold;
@@ -40,7 +44,7 @@
 </head>
 <body>
     <h2>選擇班別進行打卡</h2>
-    <div class="badge"> NFC 感應打卡 </div>
+    <div class="badge">NFC 打卡</div>
 
     <button onclick="checkIn('早診上班')">早診上班</button>
     <button onclick="checkIn('早診下班')">早診下班</button>
@@ -52,11 +56,12 @@
 
     <script>
         let userId = '';
+        const LIFF_ID = '2008064558-DLpEARY3';
         const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby2eWayqA_E9-UKHsuK7TbduLwiTZFp1c99FJThlHxqu4QbkXLzQDsWKzjFuujtQuV3/exec';
 
         async function initializeLIFF() {
             try {
-                await liff.init({ liffId: '2008064558-DLpEARY3' });
+                await liff.init({ liffId: LIFF_ID });
                 if (!liff.isLoggedIn()) {
                     liff.login();
                 } else {
@@ -82,6 +87,12 @@
             return data.code;
         }
 
+        function setButtonsDisabled(disabled) {
+            document.querySelectorAll('button').forEach(btn => {
+                btn.disabled = disabled;
+            });
+        }
+
         async function checkIn(shift) {
             try {
                 if (!liff.isLoggedIn()) {
@@ -94,6 +105,7 @@
                     return;
                 }
 
+                setButtonsDisabled(true);
                 document.getElementById('result').innerText = '⏳ 正在取得今日密碼並送出打卡...';
                 const dailyCode = await fetchDailyPassword();
                 console.log('取得今日密碼:', dailyCode);
@@ -102,22 +114,68 @@
                 const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
                 const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(dailyCode)}`;
 
-                // 自動提交表單（使用 iframe 隱藏提交過程）
+                // 建立隱藏 iframe 並等待表單送出完成後才開始 3 秒倒數
                 const iframe = document.createElement('iframe');
                 iframe.style.display = 'none';
-                iframe.src = prefilledUrl;
                 document.body.appendChild(iframe);
 
-                // 顯示打卡結果
-                const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-                document.getElementById('result').innerText = `打卡成功！\n班別：${shift}\n時間：${currentTime}`;
+                let hasStartedCountdown = false;
 
-                // 移除 iframe
-                setTimeout(() => {
-                    document.body.removeChild(iframe);
-                }, 2000);
+                function startCloseCountdown() {
+                    if (hasStartedCountdown) return;
+                    hasStartedCountdown = true;
+
+                    const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+                    let secondsLeft = 3;
+
+                    document.getElementById('result').innerText =
+                        `✅ 打卡成功！\n班別：${shift}\n時間：${currentTime}\n\n視窗將於 ${secondsLeft} 秒後自動關閉...`;
+
+                    const timer = setInterval(() => {
+                        secondsLeft -= 1;
+                        if (secondsLeft > 0) {
+                            document.getElementById('result').innerText =
+                                `✅ 打卡成功！\n班別：${shift}\n時間：${currentTime}\n\n視窗將於 ${secondsLeft} 秒後自動關閉...`;
+                        } else {
+                            clearInterval(timer);
+                            if (iframe.parentNode) {
+                                document.body.removeChild(iframe);
+                            }
+
+                            if (liff.isInClient()) {
+                                liff.closeWindow();
+                            } else {
+                                window.close();
+                                // 若 Safari/Chrome 瀏覽器限制無法自動關閉分頁，顯示完成畫面避免重複操作
+                                document.body.innerHTML = `
+                                    <div style="margin-top: 60px; font-family: Arial, sans-serif; text-align: center; padding: 20px;">
+                                        <h2>✅ 打卡已完成</h2>
+                                        <p>班別：${shift}</p>
+                                        <p>時間：${currentTime}</p>
+                                        <p style="color: #666; margin-top: 20px;">資料已送出，您現在可以直接關閉此網頁分頁。</p>
+                                    </div>
+                                `;
+                            }
+                        }
+                    }, 1000);
+                }
+
+                // 等表單請求載入完成後才開始 3 秒倒數
+                iframe.onload = () => {
+                    startCloseCountdown();
+                };
+
+                // 若跨網域限制未觸發 onload，最長等 1.5 秒保底後再開始 3 秒倒數
+                const fallbackTimer = setTimeout(() => {
+                    startCloseCountdown();
+                }, 1500);
+
+                iframe.addEventListener('load', () => clearTimeout(fallbackTimer), { once: true });
+                iframe.src = prefilledUrl;
+
             } catch (error) {
                 console.error('NFC 打卡失敗:', error);
+                setButtonsDisabled(false);
                 document.getElementById('result').innerText = '無法獲取每日亂碼，請稍後再試。';
             }
         }
