@@ -11,7 +11,6 @@
             --bg-page: #f4f6f9;
             --card-bg: #ffffff;
             --text-main: #1f2937;
-            --text-sub: #6b7280;
 
             /* 早診：琥珀暖橘系 */
             --morning-bg: #fff7ed;
@@ -57,31 +56,13 @@
             box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
         }
 
-        .header-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            margin-bottom: 10px;
-            padding: 0 2px;
-        }
-
         h2 {
-            margin: 0;
+            margin: 0 0 10px;
             font-size: 18px;
             font-weight: 700;
             color: var(--text-main);
             text-align: left;
-        }
-
-        #current-time-pill {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-sub);
-            background: #f3f4f6;
-            padding: 4px 9px;
-            border-radius: 999px;
-            white-space: nowrap;
+            padding-left: 2px;
         }
 
         .shift-grid {
@@ -96,7 +77,7 @@
             justify-content: flex-start;
             gap: 8px;
             width: 100%;
-            min-height: 54px;
+            min-height: 52px;
             margin: 0;
             padding: 8px 10px;
             font-size: 15px;
@@ -104,9 +85,9 @@
             border-radius: 12px;
             border: 1.5px solid transparent;
             cursor: pointer;
-            transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+            transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease, outline 0.16s ease;
             text-align: left;
-            line-height: 1.25;
+            line-height: 1.2;
         }
 
         .shift-btn:active:not(:disabled) {
@@ -124,9 +105,9 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 28px;
-            height: 28px;
-            border-radius: 9px;
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
             font-size: 13px;
             font-weight: 800;
             color: #ffffff;
@@ -134,23 +115,10 @@
             transition: transform 0.2s ease, width 0.2s ease, height 0.2s ease, font-size 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .shift-text-wrap {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-
         .shift-label {
             font-size: 15px;
             font-weight: 700;
             white-space: nowrap;
-        }
-
-        .shift-hint {
-            font-size: 11px;
-            font-weight: 600;
-            opacity: 0.78;
-            margin-top: 1px;
         }
 
         /* 早診樣式 */
@@ -183,54 +151,92 @@
             background-color: var(--evening-badge);
         }
 
-        /* 符合目前時間區段的視覺突顯（僅輔助辨識，不鎖定其他按鈕） */
+        /* 符合目前時間區段的視覺突顯 */
         .shift-btn.time-suggested {
-            border-width: 2px;
-            transform: translateY(-1px) scale(1.015);
             filter: saturate(1.15);
         }
 
         .shift-btn.time-suggested .shift-icon {
-            width: 34px;
-            height: 34px;
-            font-size: 16px;
-            border-radius: 11px;
-            transform: scale(1.08);
-        }
-
-        .shift-btn.time-suggested .shift-hint {
-            opacity: 1;
-            font-weight: 800;
+            width: 32px;
+            height: 32px;
+            font-size: 15px;
+            border-radius: 10px;
+            transform: scale(1.06);
         }
 
         .shift-morning.time-suggested {
             background-color: #ffedd5;
             border-color: #ea580c;
-            box-shadow: 0 4px 14px var(--morning-glow);
+            box-shadow: 0 3px 10px var(--morning-glow);
         }
         .shift-morning.time-suggested .shift-icon {
             background-color: #c2410c;
-            box-shadow: 0 2px 8px var(--morning-glow);
         }
 
         .shift-afternoon.time-suggested {
             background-color: #e0f2fe;
             border-color: #0284c7;
-            box-shadow: 0 4px 14px var(--afternoon-glow);
+            box-shadow: 0 3px 10px var(--afternoon-glow);
         }
         .shift-afternoon.time-suggested .shift-icon {
             background-color: #0369a1;
-            box-shadow: 0 2px 8px var(--afternoon-glow);
         }
 
         .shift-evening.time-suggested {
             background-color: #e0e7ff;
             border-color: #4f46e5;
-            box-shadow: 0 4px 14px var(--evening-glow);
+            box-shadow: 0 3px 10px var(--evening-glow);
         }
         .shift-evening.time-suggested .shift-icon {
             background-color: #3730a3;
-            box-shadow: 0 2px 8px var(--evening-glow);
+        }
+
+        /* 目前已預選的班別狀態 */
+        .shift-btn.is-selected {
+            border-width: 2.5px;
+            transform: translateY(-1px) scale(1.015);
+        }
+
+        .shift-morning.is-selected {
+            border-color: #9a3412;
+            box-shadow: 0 4px 14px var(--morning-glow);
+        }
+
+        .shift-afternoon.is-selected {
+            border-color: #075985;
+            box-shadow: 0 4px 14px var(--afternoon-glow);
+        }
+
+        .shift-evening.is-selected {
+            border-color: #3730a3;
+            box-shadow: 0 4px 14px var(--evening-glow);
+        }
+
+        #submit-checkin-btn {
+            display: block;
+            width: 100%;
+            margin: 14px 0 0;
+            padding: 13px 20px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #ffffff;
+            background-color: #06c755;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(6, 199, 85, 0.25);
+            transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease;
+        }
+
+        #submit-checkin-btn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        #submit-checkin-btn:disabled {
+            opacity: 0.48;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
         }
 
         #fallback-box {
@@ -289,56 +295,36 @@
 </head>
 <body>
     <div id="shift-selection">
-        <div class="header-row">
-            <h2>選擇班別進行打卡</h2>
-            <span id="current-time-pill">--:--</span>
-        </div>
+        <h2>選擇班別進行打卡</h2>
         <div class="shift-grid">
-            <button type="button" class="shift-btn shift-morning" data-shift="早診上班" onclick="checkIn('早診上班')">
-                <span class="shift-icon">晨進</span>
-                <span class="shift-text-wrap">
-                    <span class="shift-label">早診 · 上班</span>
-                    <span class="shift-hint">07:00–11:00</span>
-                </span>
+            <button type="button" class="shift-btn shift-morning" data-shift="早診上班" onclick="selectShift('早診上班')">
+                <span class="shift-icon">晨</span>
+                <span class="shift-label">早診上班</span>
             </button>
-            <button type="button" class="shift-btn shift-morning" data-shift="早診下班" onclick="checkIn('早診下班')">
-                <span class="shift-icon">晨退</span>
-                <span class="shift-text-wrap">
-                    <span class="shift-label">早診 · 下班</span>
-                    <span class="shift-hint">11:30–13:00</span>
-                </span>
+            <button type="button" class="shift-btn shift-morning" data-shift="早診下班" onclick="selectShift('早診下班')">
+                <span class="shift-icon">晨</span>
+                <span class="shift-label">早診下班</span>
             </button>
 
-            <button type="button" class="shift-btn shift-afternoon" data-shift="午診上班" onclick="checkIn('午診上班')">
-                <span class="shift-icon">午進</span>
-                <span class="shift-text-wrap">
-                    <span class="shift-label">午診 · 上班</span>
-                    <span class="shift-hint">13:30–15:30</span>
-                </span>
+            <button type="button" class="shift-btn shift-afternoon" data-shift="午診上班" onclick="selectShift('午診上班')">
+                <span class="shift-icon">午</span>
+                <span class="shift-label">午診上班</span>
             </button>
-            <button type="button" class="shift-btn shift-afternoon" data-shift="午診下班" onclick="checkIn('午診下班')">
-                <span class="shift-icon">午退</span>
-                <span class="shift-text-wrap">
-                    <span class="shift-label">午診 · 下班</span>
-                    <span class="shift-hint">17:00–18:00</span>
-                </span>
+            <button type="button" class="shift-btn shift-afternoon" data-shift="午診下班" onclick="selectShift('午診下班')">
+                <span class="shift-icon">午</span>
+                <span class="shift-label">午診下班</span>
             </button>
 
-            <button type="button" class="shift-btn shift-evening" data-shift="晚診上班" onclick="checkIn('晚診上班')">
-                <span class="shift-icon">晚進</span>
-                <span class="shift-text-wrap">
-                    <span class="shift-label">晚診 · 上班</span>
-                    <span class="shift-hint">18:00–19:30</span>
-                </span>
+            <button type="button" class="shift-btn shift-evening" data-shift="晚診上班" onclick="selectShift('晚診上班')">
+                <span class="shift-icon">晚</span>
+                <span class="shift-label">晚診上班</span>
             </button>
-            <button type="button" class="shift-btn shift-evening" data-shift="晚診下班" onclick="checkIn('晚診下班')">
-                <span class="shift-icon">晚退</span>
-                <span class="shift-text-wrap">
-                    <span class="shift-label">晚診 · 下班</span>
-                    <span class="shift-hint">21:00–22:30</span>
-                </span>
+            <button type="button" class="shift-btn shift-evening" data-shift="晚診下班" onclick="selectShift('晚診下班')">
+                <span class="shift-icon">晚</span>
+                <span class="shift-label">晚診下班</span>
             </button>
         </div>
+        <button id="submit-checkin-btn" type="button" onclick="submitSelectedShift()">送出打卡</button>
     </div>
 
     <div id="fallback-box">
@@ -359,8 +345,10 @@
         let activeIframe = null;
         let completedShift = '';
         let completedTime = '';
+        let selectedShift = '';
+        let hasManualSelection = false;
 
-        function getTaipeiMinutesAndLabel() {
+        function getTaipeiTotalMinutes() {
             const now = new Date();
             const parts = new Intl.DateTimeFormat('en-GB', {
                 timeZone: 'Asia/Taipei',
@@ -371,11 +359,7 @@
 
             const hour = Number(parts.find(p => p.type === 'hour')?.value ?? 0);
             const minute = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
-            const totalMinutes = hour * 60 + minute;
-            const hh = String(hour).padStart(2, '0');
-            const mm = String(minute).padStart(2, '0');
-
-            return { totalMinutes, label: `${hh}:${mm}` };
+            return hour * 60 + minute;
         }
 
         function detectSuggestedShift(totalMinutes) {
@@ -400,35 +384,33 @@
             return '';
         }
 
-        function applyTimeVisualHint() {
-            const { totalMinutes, label } = getTaipeiMinutesAndLabel();
-            const suggestedShift = detectSuggestedShift(totalMinutes);
+        function renderShiftSelectionState() {
+            document.querySelectorAll('.shift-btn').forEach((btn) => {
+                const shiftName = btn.getAttribute('data-shift');
+                btn.classList.toggle('is-selected', shiftName === selectedShift);
+            });
+        }
 
-            const timePill = document.getElementById('current-time-pill');
-            if (timePill) {
-                timePill.textContent = suggestedShift ? `${label} · ${suggestedShift}` : label;
-            }
+        function selectShift(shift) {
+            selectedShift = shift;
+            hasManualSelection = true;
+            document.getElementById('result').innerText = '';
+            renderShiftSelectionState();
+        }
+
+        function applyTimeVisualHint() {
+            const totalMinutes = getTaipeiTotalMinutes();
+            const suggestedShift = detectSuggestedShift(totalMinutes);
 
             document.querySelectorAll('.shift-btn').forEach((btn) => {
                 const shiftName = btn.getAttribute('data-shift');
-                const hintEl = btn.querySelector('.shift-hint');
-                const defaultHint = hintEl?.getAttribute('data-default-hint') || hintEl?.textContent || '';
-                if (hintEl && !hintEl.getAttribute('data-default-hint')) {
-                    hintEl.setAttribute('data-default-hint', defaultHint);
-                }
-
-                if (suggestedShift && shiftName === suggestedShift) {
-                    btn.classList.add('time-suggested');
-                    if (hintEl) {
-                        hintEl.textContent = `${defaultHint} · 建議`;
-                    }
-                } else {
-                    btn.classList.remove('time-suggested');
-                    if (hintEl) {
-                        hintEl.textContent = defaultHint;
-                    }
-                }
+                btn.classList.toggle('time-suggested', Boolean(suggestedShift && shiftName === suggestedShift));
             });
+
+            if (!hasManualSelection && suggestedShift && !selectedShift) {
+                selectedShift = suggestedShift;
+            }
+            renderShiftSelectionState();
         }
 
         function extractCodeFromInput(rawValue) {
@@ -653,6 +635,14 @@
 
             iframe.addEventListener('load', () => clearTimeout(fallbackTimer), { once: true });
             iframe.src = prefilledUrl;
+        }
+
+        async function submitSelectedShift() {
+            if (!selectedShift) {
+                document.getElementById('result').innerText = '請先選擇一個班別。';
+                return;
+            }
+            await checkIn(selectedShift);
         }
 
         async function checkIn(shift) {
