@@ -1,65 +1,364 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
     <title>NFC 打卡</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
+        :root {
+            --bg-page: #f4f6f9;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+
+            /* 早診：琥珀暖橘系 */
+            --morning-bg: #fff7ed;
+            --morning-border: #fdba74;
+            --morning-text: #9a3412;
+            --morning-badge: #ea580c;
+            --morning-glow: rgba(234, 88, 12, 0.24);
+
+            /* 午診：青藍系 */
+            --afternoon-bg: #f0f9ff;
+            --afternoon-border: #7dd3fc;
+            --afternoon-text: #075985;
+            --afternoon-badge: #0284c7;
+            --afternoon-glow: rgba(2, 132, 199, 0.24);
+
+            /* 晚診：靛紫系 */
+            --evening-bg: #eef2ff;
+            --evening-border: #a5b4fc;
+            --evening-text: #3730a3;
+            --evening-badge: #4f46e5;
+            --evening-glow: rgba(79, 70, 229, 0.24);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", Arial, sans-serif;
             text-align: center;
-            padding: 20px;
+            padding: 12px 14px 20px;
+            margin: 0;
+            background-color: var(--bg-page);
+            color: var(--text-main);
         }
-        .badge {
-            display: inline-block;
-            padding: 6px 14px;
-            margin-bottom: 15px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: bold;
-            background-color: #e6f4ea;
-            color: #137333;
+
+        #shift-selection {
+            max-width: 440px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 14px 12px 16px;
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
         }
-        button {
-            display: block;
-            margin: 10px auto;
-            padding: 12px 24px;
-            font-size: 16px;
+
+        h2 {
+            margin: 0 0 10px;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-main);
+            text-align: left;
+            padding-left: 2px;
+        }
+
+        .shift-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .shift-btn {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 8px;
+            width: 100%;
+            min-height: 52px;
+            margin: 0;
+            padding: 8px 10px;
+            font-size: 15px;
+            font-weight: 700;
+            border-radius: 12px;
+            border: 1.5px solid transparent;
             cursor: pointer;
-            width: 80%;
-            max-width: 260px;
+            transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease, outline 0.16s ease;
+            text-align: left;
+            line-height: 1.2;
         }
-        button:disabled {
-            opacity: 0.5;
+
+        .shift-btn:active:not(:disabled) {
+            transform: scale(0.97);
+        }
+
+        .shift-btn:disabled {
+            opacity: 0.48;
             cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
+
+        .shift-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 800;
+            color: #ffffff;
+            flex-shrink: 0;
+            transition: transform 0.2s ease, width 0.2s ease, height 0.2s ease, font-size 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .shift-label {
+            font-size: 15px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        /* 早診樣式 */
+        .shift-morning {
+            background-color: var(--morning-bg);
+            border-color: var(--morning-border);
+            color: var(--morning-text);
+        }
+        .shift-morning .shift-icon {
+            background-color: var(--morning-badge);
+        }
+
+        /* 午診樣式 */
+        .shift-afternoon {
+            background-color: var(--afternoon-bg);
+            border-color: var(--afternoon-border);
+            color: var(--afternoon-text);
+        }
+        .shift-afternoon .shift-icon {
+            background-color: var(--afternoon-badge);
+        }
+
+        /* 晚診樣式 */
+        .shift-evening {
+            background-color: var(--evening-bg);
+            border-color: var(--evening-border);
+            color: var(--evening-text);
+        }
+        .shift-evening .shift-icon {
+            background-color: var(--evening-badge);
+        }
+
+        /* 符合目前時間區段的視覺突顯 */
+        .shift-btn.time-suggested {
+            filter: saturate(1.15);
+        }
+
+        .shift-btn.time-suggested .shift-icon {
+            width: 32px;
+            height: 32px;
+            font-size: 15px;
+            border-radius: 10px;
+            transform: scale(1.06);
+        }
+
+        .shift-morning.time-suggested {
+            background-color: #ffedd5;
+            border-color: #ea580c;
+            box-shadow: 0 3px 10px var(--morning-glow);
+        }
+        .shift-morning.time-suggested .shift-icon {
+            background-color: #c2410c;
+        }
+
+        .shift-afternoon.time-suggested {
+            background-color: #e0f2fe;
+            border-color: #0284c7;
+            box-shadow: 0 3px 10px var(--afternoon-glow);
+        }
+        .shift-afternoon.time-suggested .shift-icon {
+            background-color: #0369a1;
+        }
+
+        .shift-evening.time-suggested {
+            background-color: #e0e7ff;
+            border-color: #4f46e5;
+            box-shadow: 0 3px 10px var(--evening-glow);
+        }
+        .shift-evening.time-suggested .shift-icon {
+            background-color: #3730a3;
+        }
+
+        /* 目前已預選的班別狀態 */
+        .shift-btn.is-selected {
+            border-width: 2.5px;
+            transform: translateY(-1px) scale(1.015);
+        }
+
+        .shift-morning.is-selected {
+            border-color: #9a3412;
+            box-shadow: 0 4px 14px var(--morning-glow);
+        }
+
+        .shift-afternoon.is-selected {
+            border-color: #075985;
+            box-shadow: 0 4px 14px var(--afternoon-glow);
+        }
+
+        .shift-evening.is-selected {
+            border-color: #3730a3;
+            box-shadow: 0 4px 14px var(--evening-glow);
+        }
+
+        #submit-checkin-btn {
+            display: block;
+            width: 100%;
+            margin: 14px 0 0;
+            padding: 13px 20px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #ffffff;
+            background-color: #06c755;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(6, 199, 85, 0.25);
+            transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease;
+        }
+
+        #submit-checkin-btn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        #submit-checkin-btn:disabled {
+            opacity: 0.48;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
         #result {
-            margin-top: 20px;
+            margin-top: 16px;
             font-weight: bold;
             white-space: pre-line;
             line-height: 1.6;
+            font-size: 15px;
         }
     </style>
 </head>
 <body>
-    <h2>選擇班別進行打卡</h2>
-    <div class="badge">NFC 打卡</div>
+    <div id="shift-selection">
+        <h2>選擇班別進行打卡</h2>
+        <div class="shift-grid">
+            <button type="button" class="shift-btn shift-morning" data-shift="早診上班" onclick="selectShift('早診上班')">
+                <span class="shift-icon">早</span>
+                <span class="shift-label">早診上班</span>
+            </button>
+            <button type="button" class="shift-btn shift-morning" data-shift="早診下班" onclick="selectShift('早診下班')">
+                <span class="shift-icon">早</span>
+                <span class="shift-label">早診下班</span>
+            </button>
 
-    <button onclick="checkIn('早診上班')">早診上班</button>
-    <button onclick="checkIn('早診下班')">早診下班</button>
-    <button onclick="checkIn('午診上班')">午診上班</button>
-    <button onclick="checkIn('午診下班')">午診下班</button>
-    <button onclick="checkIn('晚診上班')">晚診上班</button>
-    <button onclick="checkIn('晚診下班')">晚診下班</button>
+            <button type="button" class="shift-btn shift-afternoon" data-shift="午診上班" onclick="selectShift('午診上班')">
+                <span class="shift-icon">午</span>
+                <span class="shift-label">午診上班</span>
+            </button>
+            <button type="button" class="shift-btn shift-afternoon" data-shift="午診下班" onclick="selectShift('午診下班')">
+                <span class="shift-icon">午</span>
+                <span class="shift-label">午診下班</span>
+            </button>
+
+            <button type="button" class="shift-btn shift-evening" data-shift="晚診上班" onclick="selectShift('晚診上班')">
+                <span class="shift-icon">晚</span>
+                <span class="shift-label">晚診上班</span>
+            </button>
+            <button type="button" class="shift-btn shift-evening" data-shift="晚診下班" onclick="selectShift('晚診下班')">
+                <span class="shift-icon">晚</span>
+                <span class="shift-label">晚診下班</span>
+            </button>
+        </div>
+        <button id="submit-checkin-btn" type="button" onclick="submitSelectedShift()">送出打卡</button>
+    </div>
+
     <div id="result"></div>
 
     <script>
         let userId = '';
+        let selectedShift = '';
+        let hasManualSelection = false;
         const LIFF_ID = '2008064558-DLpEARY3';
         const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby2eWayqA_E9-UKHsuK7TbduLwiTZFp1c99FJThlHxqu4QbkXLzQDsWKzjFuujtQuV3/exec';
 
+        function getTaipeiTotalMinutes() {
+            const now = new Date();
+            const parts = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Asia/Taipei',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).formatToParts(now);
+
+            const hour = Number(parts.find(p => p.type === 'hour')?.value ?? 0);
+            const minute = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
+            return hour * 60 + minute;
+        }
+
+        function detectSuggestedShift(totalMinutes) {
+            if (totalMinutes >= 7 * 60 && totalMinutes <= 11 * 60) {
+                return '早診上班';
+            }
+            if (totalMinutes >= 11 * 60 + 30 && totalMinutes <= 13 * 60) {
+                return '早診下班';
+            }
+            if (totalMinutes >= 13 * 60 + 30 && totalMinutes <= 15 * 60 + 30) {
+                return '午診上班';
+            }
+            if (totalMinutes >= 17 * 60 && totalMinutes <= 18 * 60) {
+                return '午診下班';
+            }
+            if (totalMinutes >= 18 * 60 && totalMinutes <= 19 * 60 + 30) {
+                return '晚診上班';
+            }
+            if (totalMinutes >= 21 * 60 && totalMinutes <= 22 * 60 + 30) {
+                return '晚診下班';
+            }
+            return '';
+        }
+
+        function renderShiftSelectionState() {
+            document.querySelectorAll('.shift-btn').forEach((btn) => {
+                const shiftName = btn.getAttribute('data-shift');
+                btn.classList.toggle('is-selected', shiftName === selectedShift);
+            });
+        }
+
+        function selectShift(shift) {
+            selectedShift = shift;
+            hasManualSelection = true;
+            document.getElementById('result').innerText = '';
+            renderShiftSelectionState();
+        }
+
+        function applyTimeVisualHint() {
+            const totalMinutes = getTaipeiTotalMinutes();
+            const suggestedShift = detectSuggestedShift(totalMinutes);
+
+            document.querySelectorAll('.shift-btn').forEach((btn) => {
+                const shiftName = btn.getAttribute('data-shift');
+                btn.classList.toggle('time-suggested', Boolean(suggestedShift && shiftName === suggestedShift));
+            });
+
+            if (!hasManualSelection && suggestedShift && !selectedShift) {
+                selectedShift = suggestedShift;
+            }
+            renderShiftSelectionState();
+        }
+
         async function initializeLIFF() {
+            applyTimeVisualHint();
+            setInterval(applyTimeVisualHint, 30000);
+
             try {
                 await liff.init({ liffId: LIFF_ID });
                 if (!liff.isLoggedIn()) {
@@ -88,9 +387,17 @@
         }
 
         function setButtonsDisabled(disabled) {
-            document.querySelectorAll('button').forEach(btn => {
+            document.querySelectorAll('#shift-selection button').forEach(btn => {
                 btn.disabled = disabled;
             });
+        }
+
+        async function submitSelectedShift() {
+            if (!selectedShift) {
+                document.getElementById('result').innerText = '請先選擇一個班別。';
+                return;
+            }
+            await checkIn(selectedShift);
         }
 
         async function checkIn(shift) {
@@ -114,7 +421,7 @@
                 const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfkXPk4mjvH78PNfsXduF8DPg3vf3fmgIfNJXtCR5aIZR69QQ/formResponse';
                 const prefilledUrl = `${formUrl}?=usp=pp_url&entry.1366094180=${encodeURIComponent(shift)}&entry.538125100=${encodeURIComponent(userId)}&entry.1841717274=${encodeURIComponent(dailyCode)}`;
 
-                // 建立隱藏 iframe 並等待表單送出完成後才開始 3 秒倒數
+                // 建立隱藏 iframe 並等待表單送出完成後才開始 10 秒倒數
                 const iframe = document.createElement('iframe');
                 iframe.style.display = 'none';
                 document.body.appendChild(iframe);
@@ -126,7 +433,7 @@
                     hasStartedCountdown = true;
 
                     const currentTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-                    let secondsLeft = 3;
+                    let secondsLeft = 10;
 
                     document.getElementById('result').innerText =
                         `✅ 打卡成功！\n班別：${shift}\n時間：${currentTime}\n\n視窗將於 ${secondsLeft} 秒後自動關閉...`;
@@ -160,12 +467,12 @@
                     }, 1000);
                 }
 
-                // 等表單請求載入完成後才開始 3 秒倒數
+                // 等表單請求載入完成後才開始 10 秒倒數
                 iframe.onload = () => {
                     startCloseCountdown();
                 };
 
-                // 若跨網域限制未觸發 onload，最長等 1.5 秒保底後再開始 3 秒倒數
+                // 若跨網域限制未觸發 onload，最長等 1.5 秒保底後再開始 10 秒倒數
                 const fallbackTimer = setTimeout(() => {
                     startCloseCountdown();
                 }, 1500);
